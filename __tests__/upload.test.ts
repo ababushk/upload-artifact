@@ -73,6 +73,7 @@ const mockInputs = (
     [Inputs.CompressionLevel]: 6,
     [Inputs.Overwrite]: false,
     [Inputs.Archive]: true,
+    [Inputs.Verbose]: true,
     ...overrides
   }
 
@@ -119,7 +120,7 @@ describe('upload', () => {
       fixtures.artifactName,
       [fixtures.filesToUpload[0]],
       fixtures.rootDirectory,
-      {compressionLevel: 6}
+      {compressionLevel: 6, verbose: true}
     )
   })
 
@@ -130,7 +131,7 @@ describe('upload', () => {
       fixtures.artifactName,
       fixtures.filesToUpload,
       fixtures.rootDirectory,
-      {compressionLevel: 6}
+      {compressionLevel: 6, verbose: true}
     )
   })
 
@@ -156,7 +157,7 @@ describe('upload', () => {
       fixtures.artifactName,
       fixtures.filesToUpload,
       fixtures.rootDirectory,
-      {compressionLevel: 2}
+      {compressionLevel: 2, verbose: true}
     )
   })
 
@@ -171,7 +172,7 @@ describe('upload', () => {
       fixtures.artifactName,
       fixtures.filesToUpload,
       fixtures.rootDirectory,
-      {retentionDays: 7, compressionLevel: 6}
+      {retentionDays: 7, compressionLevel: 6, verbose: true}
     )
   })
 
@@ -241,7 +242,7 @@ describe('upload', () => {
       fixtures.artifactName,
       fixtures.filesToUpload,
       fixtures.rootDirectory,
-      {compressionLevel: 6}
+      {compressionLevel: 6, verbose: true}
     )
 
     expect(artifact.default.deleteArtifact).toHaveBeenCalledWith(
@@ -264,7 +265,7 @@ describe('upload', () => {
       fixtures.artifactName,
       fixtures.filesToUpload,
       fixtures.rootDirectory,
-      {compressionLevel: 6}
+      {compressionLevel: 6, verbose: true}
     )
 
     expect(artifact.default.deleteArtifact).toHaveBeenCalledWith(
@@ -291,7 +292,7 @@ describe('upload', () => {
       fixtures.artifactName,
       [fixtures.filesToUpload[0]],
       fixtures.rootDirectory,
-      {compressionLevel: 6, skipArchive: true}
+      {compressionLevel: 6, skipArchive: true, verbose: true}
     )
   })
 
@@ -311,7 +312,7 @@ describe('upload', () => {
       fixtures.artifactName,
       [fixtures.filesToUpload[0]],
       fixtures.rootDirectory,
-      {compressionLevel: 6}
+      {compressionLevel: 6, verbose: true}
     )
   })
 
@@ -326,5 +327,25 @@ describe('upload', () => {
       `When 'archive' is set to false, only a single file can be uploaded. Found ${fixtures.filesToUpload.length} files to upload.`
     )
     expect(artifact.default.uploadArtifact).not.toHaveBeenCalled()
+  })
+
+  test('emits verbose logs when verbose input is true', async () => {
+    mockInputs({[Inputs.Verbose]: true})
+
+    await run()
+
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining('[VERBOSE] Starting upload-artifact action')
+    )
+  })
+
+  test('does not emit verbose logs when verbose input is false', async () => {
+    mockInputs({[Inputs.Verbose]: false})
+
+    await run()
+
+    expect(core.info).not.toHaveBeenCalledWith(
+      expect.stringContaining('[VERBOSE]')
+    )
   })
 })

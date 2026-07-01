@@ -131814,6 +131814,7 @@ var Inputs;
     Inputs["CompressionLevel"] = "compression-level";
     Inputs["DeleteMerged"] = "delete-merged";
     Inputs["IncludeHiddenFiles"] = "include-hidden-files";
+    Inputs["Verbose"] = "verbose";
 })(Inputs || (Inputs = {}));
 
 ;// CONCATENATED MODULE: ./src/merge/input-helper.ts
@@ -131828,6 +131829,7 @@ function getInputs() {
     const separateDirectories = getBooleanInput(Inputs.SeparateDirectories);
     const deleteMerged = getBooleanInput(Inputs.DeleteMerged);
     const includeHiddenFiles = getBooleanInput(Inputs.IncludeHiddenFiles);
+    const verbose = getBooleanInput(Inputs.Verbose, { required: false });
     const inputs = {
         name,
         pattern,
@@ -131835,7 +131837,8 @@ function getInputs() {
         deleteMerged,
         retentionDays: 0,
         compressionLevel: 6,
-        includeHiddenFiles
+        includeHiddenFiles,
+        verbose
     };
     const retentionDaysStr = getInput(Inputs.RetentionDays);
     if (retentionDaysStr) {
@@ -131857,12 +131860,32 @@ function getInputs() {
     return inputs;
 }
 
+;// CONCATENATED MODULE: ./src/shared/verbose-log.ts
+
+const verboseLog = (message, verbose) => {
+    if (verbose) {
+        info(`[VERBOSE] ${message}`);
+    }
+    else {
+        core_debug(message);
+    }
+};
+
 ;// CONCATENATED MODULE: ./src/shared/upload-artifact.ts
 
 
 
-async function upload_artifact_uploadArtifact(artifactName, filesToUpload, rootDirectory, options) {
+
+async function upload_artifact_uploadArtifact(artifactName, filesToUpload, rootDirectory, options, verbose) {
+    verboseLog(`Calling artifact.uploadArtifact with name '${artifactName}', ${filesToUpload.length} file(s), root '${rootDirectory}', options: ${JSON.stringify(options)}`, verbose);
+    if (verbose && filesToUpload.length <= 20) {
+        verboseLog(`Files to upload: ${JSON.stringify(filesToUpload)}`, verbose);
+    }
+    else if (verbose) {
+        verboseLog(`First 10 files to upload: ${JSON.stringify(filesToUpload.slice(0, 10))} ... (${filesToUpload.length} total)`, verbose);
+    }
     const uploadResponse = await lib_artifact.uploadArtifact(artifactName, filesToUpload, rootDirectory, options);
+    verboseLog(`Upload API response - ID: ${uploadResponse.id}, size: ${uploadResponse.size} bytes, digest: ${uploadResponse.digest ?? '<none>'}`, verbose);
     info(`Artifact ${artifactName} has been successfully uploaded! Final size is ${uploadResponse.size} bytes. Artifact ID is ${uploadResponse.id}`);
     setOutput('artifact-id', uploadResponse.id);
     setOutput('artifact-digest', uploadResponse.digest);
@@ -131870,6 +131893,7 @@ async function upload_artifact_uploadArtifact(artifactName, filesToUpload, rootD
     const artifactURL = `${github_context.serverUrl}/${repository.owner}/${repository.repo}/actions/runs/${github_context.runId}/artifacts/${uploadResponse.id}`;
     info(`Artifact download URL: ${artifactURL}`);
     setOutput('artifact-url', artifactURL);
+    verboseLog(`Set outputs artifact-id, artifact-digest, artifact-url`, verbose);
 }
 
 ;// CONCATENATED MODULE: ./node_modules/@actions/glob/lib/internal-glob-options-helper.js
@@ -132840,6 +132864,7 @@ function glob_hashFiles(patterns_1) {
 
 
 
+
 const stats = (0,external_util_.promisify)(external_fs_.stat);
 function getDefaultGlobOptions(includeHiddenFiles) {
     return {
@@ -132900,10 +132925,12 @@ function getMultiPathLCA(searchPaths) {
     }
     return external_path_.join(...commonPaths);
 }
-async function findFilesToUpload(searchPath, includeHiddenFiles) {
+async function findFilesToUpload(searchPath, includeHiddenFiles, verbose = false) {
+    verboseLog(`Creating globber for search path '${searchPath}' (excludeHiddenFiles: ${!(includeHiddenFiles || false)})`, verbose);
     const searchResults = [];
     const globber = await create(searchPath, getDefaultGlobOptions(includeHiddenFiles || false));
     const rawSearchResults = await globber.glob();
+    verboseLog(`Glob matched ${rawSearchResults.length} path(s) before filtering directories`, verbose);
     /*
       Files are saved with case insensitivity. Uploading both a.txt and A.txt will files to be overwritten
       Detect any files that could be overwritten for user awareness
@@ -132918,6 +132945,7 @@ async function findFilesToUpload(searchPath, includeHiddenFiles) {
         // isDirectory() returns false for symlinks if using fs.lstat(), make sure to use fs.stat() instead
         if (!fileStats.isDirectory()) {
             core_debug(`File:${searchResult} was found using the provided searchPath`);
+            verboseLog(`Including file: ${searchResult}`, verbose);
             searchResults.push(searchResult);
             // detect any files that would be overwritten because of case insensitivity
             if (set.has(searchResult.toLowerCase())) {
@@ -132929,10 +132957,12 @@ async function findFilesToUpload(searchPath, includeHiddenFiles) {
         }
         else {
             core_debug(`Removing ${searchResult} from rawSearchResults because it is a directory`);
+            verboseLog(`Skipping directory: ${searchResult}`, verbose);
         }
     }
     // Calculate the root directory for the artifact using the search paths that were utilized
     const searchPaths = globber.getSearchPaths();
+    verboseLog(`Glob search paths: ${JSON.stringify(searchPaths)}`, verbose);
     if (searchPaths.length > 1) {
         info(`Multiple search paths detected. Calculating the least common ancestor of all paths`);
         const lcaSearchPath = getMultiPathLCA(searchPaths);
@@ -132967,6 +132997,7 @@ async function findFilesToUpload(searchPath, includeHiddenFiles) {
 
 
 
+
 const PARALLEL_DOWNLOADS = 5;
 const chunk = (arr, n) => arr.reduce((acc, cur, i) => {
     const index = Math.floor(i / n);
@@ -132975,28 +133006,52 @@ const chunk = (arr, n) => arr.reduce((acc, cur, i) => {
 }, []);
 async function run() {
     const inputs = getInputs();
+    verboseLog(`Starting merge-artifact action with inputs: ${JSON.stringify({
+        name: inputs.name,
+        pattern: inputs.pattern,
+        separateDirectories: inputs.separateDirectories,
+        retentionDays: inputs.retentionDays ?? '<default>',
+        compressionLevel: inputs.compressionLevel ?? '<default>',
+        deleteMerged: inputs.deleteMerged,
+        includeHiddenFiles: inputs.includeHiddenFiles,
+        verbose: inputs.verbose
+    }, null, 2)}`, inputs.verbose);
     const tmpDir = await (0,promises_namespaceObject.mkdtemp)('merge-artifact');
+    verboseLog(`Created temporary directory for merge: ${tmpDir}`, inputs.verbose);
+    verboseLog(`Listing latest artifacts from current workflow run`, inputs.verbose);
     const listArtifactResponse = await lib_artifact.listArtifacts({
         latest: true
     });
+    verboseLog(`Retrieved ${listArtifactResponse.artifacts.length} artifact(s) from API`, inputs.verbose);
     const matcher = new Minimatch(inputs.pattern);
     const artifacts = listArtifactResponse.artifacts.filter(artifact => matcher.match(artifact.name));
     core_debug(`Filtered from ${listArtifactResponse.artifacts.length} to ${artifacts.length} artifacts`);
+    verboseLog(`Pattern '${inputs.pattern}' matched ${artifacts.length} artifact(s)`, inputs.verbose);
     if (artifacts.length === 0) {
+        verboseLog(`No artifacts matched pattern '${inputs.pattern}'`, inputs.verbose);
         throw new Error(`No artifacts found matching pattern '${inputs.pattern}'`);
     }
     info(`Preparing to download the following artifacts:`);
     artifacts.forEach(artifact => {
         info(`- ${artifact.name} (ID: ${artifact.id}, Size: ${artifact.size})`);
+        verboseLog(`Will download artifact '${artifact.name}' (ID: ${artifact.id}, size: ${artifact.size}, digest: ${artifact.digest ?? '<none>'})`, inputs.verbose);
     });
-    const downloadPromises = artifacts.map(artifact => lib_artifact.downloadArtifact(artifact.id, {
-        path: inputs.separateDirectories
+    const downloadPromises = artifacts.map(artifact => {
+        const downloadPath = inputs.separateDirectories
             ? external_path_.join(tmpDir, artifact.name)
-            : tmpDir
-    }));
+            : tmpDir;
+        verboseLog(`Artifact '${artifact.name}' download path: ${downloadPath}`, inputs.verbose);
+        return lib_artifact.downloadArtifact(artifact.id, {
+            path: downloadPath
+        });
+    });
     const chunkedPromises = chunk(downloadPromises, PARALLEL_DOWNLOADS);
-    for (const chunk of chunkedPromises) {
-        await Promise.all(chunk);
+    verboseLog(`Downloading ${artifacts.length} artifact(s) in ${chunkedPromises.length} chunk(s) (parallelism: ${PARALLEL_DOWNLOADS})`, inputs.verbose);
+    for (let chunkIndex = 0; chunkIndex < chunkedPromises.length; chunkIndex++) {
+        const currentChunk = chunkedPromises[chunkIndex];
+        verboseLog(`Processing download chunk ${chunkIndex + 1}/${chunkedPromises.length} (${currentChunk.length} artifact(s))`, inputs.verbose);
+        await Promise.all(currentChunk);
+        verboseLog(`Download chunk ${chunkIndex + 1} completed`, inputs.verbose);
     }
     const options = {};
     if (inputs.retentionDays) {
@@ -133005,20 +133060,28 @@ async function run() {
     if (typeof inputs.compressionLevel !== 'undefined') {
         options.compressionLevel = inputs.compressionLevel;
     }
-    const searchResult = await findFilesToUpload(tmpDir, inputs.includeHiddenFiles);
-    await upload_artifact_uploadArtifact(inputs.name, searchResult.filesToUpload, searchResult.rootDirectory, options);
+    verboseLog(`Scanning merged content in '${tmpDir}' for upload as '${inputs.name}'`, inputs.verbose);
+    const searchResult = await findFilesToUpload(tmpDir, inputs.includeHiddenFiles, inputs.verbose);
+    verboseLog(`Uploading merged artifact`, inputs.verbose);
+    await upload_artifact_uploadArtifact(inputs.name, searchResult.filesToUpload, searchResult.rootDirectory, options, inputs.verbose);
     info(`The ${artifacts.length} artifact(s) have been successfully merged!`);
+    verboseLog(`Merge upload completed successfully`, inputs.verbose);
     if (inputs.deleteMerged) {
+        verboseLog(`delete-merged enabled, deleting ${artifacts.length} source artifact(s)`, inputs.verbose);
         const deletePromises = artifacts.map(artifact => lib_artifact.deleteArtifact(artifact.name));
         await Promise.all(deletePromises);
         info(`The ${artifacts.length} artifact(s) have been deleted`);
+        verboseLog(`Source artifacts deleted`, inputs.verbose);
     }
     try {
         await (0,promises_namespaceObject.rm)(tmpDir, { recursive: true });
+        verboseLog(`Removed temporary directory ${tmpDir}`, inputs.verbose);
     }
     catch (error) {
         warning(`Unable to remove temporary directory: ${error.message}`);
+        verboseLog(`Failed to remove temporary directory: ${error.message}`, inputs.verbose);
     }
+    verboseLog(`Merge action completed successfully`, inputs.verbose);
 }
 
 ;// CONCATENATED MODULE: ./src/merge/index.ts

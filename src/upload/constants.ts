@@ -7,7 +7,8 @@ export enum Inputs {
   CompressionLevel = 'compression-level',
   Overwrite = 'overwrite',
   IncludeHiddenFiles = 'include-hidden-files',
-  Archive = 'archive'
+  Archive = 'archive',
+  Verbose = 'verbose'
 }
 
 export enum NoFileOptions {

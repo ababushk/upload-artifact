@@ -41,6 +41,9 @@ inputs:
       If true, hidden files will be included in the merged artifact.
       If false, hidden files will be excluded from the merged artifact.
     default: 'false'
+  verbose:
+    description: 'Enable verbose logging for troubleshooting merge and upload issues.'
+    default: 'true'
 
 outputs:
   artifact-id:

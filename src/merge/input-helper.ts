@@ -11,6 +11,7 @@ export function getInputs(): MergeInputs {
   const separateDirectories = core.getBooleanInput(Inputs.SeparateDirectories)
   const deleteMerged = core.getBooleanInput(Inputs.DeleteMerged)
   const includeHiddenFiles = core.getBooleanInput(Inputs.IncludeHiddenFiles)
+  const verbose = core.getBooleanInput(Inputs.Verbose, {required: false})
 
   const inputs = {
     name,
@@ -19,7 +20,8 @@ export function getInputs(): MergeInputs {
     deleteMerged,
     retentionDays: 0,
     compressionLevel: 6,
-    includeHiddenFiles
+    includeHiddenFiles,
+    verbose
   } as MergeInputs
 
   const retentionDaysStr = core.getInput(Inputs.RetentionDays)

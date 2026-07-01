@@ -4,6 +4,7 @@ import {debug, info} from '@actions/core'
 import {stat} from 'fs'
 import {dirname} from 'path'
 import {promisify} from 'util'
+import {verboseLog} from './verbose-log.js'
 const stats = promisify(stat)
 
 export interface SearchResult {
@@ -81,14 +82,23 @@ function getMultiPathLCA(searchPaths: string[]): string {
 
 export async function findFilesToUpload(
   searchPath: string,
-  includeHiddenFiles?: boolean
+  includeHiddenFiles?: boolean,
+  verbose = false
 ): Promise<SearchResult> {
+  verboseLog(
+    `Creating globber for search path '${searchPath}' (excludeHiddenFiles: ${!(includeHiddenFiles || false)})`,
+    verbose
+  )
   const searchResults: string[] = []
   const globber = await glob.create(
     searchPath,
     getDefaultGlobOptions(includeHiddenFiles || false)
   )
   const rawSearchResults: string[] = await globber.glob()
+  verboseLog(
+    `Glob matched ${rawSearchResults.length} path(s) before filtering directories`,
+    verbose
+  )
 
   /*
     Files are saved with case insensitivity. Uploading both a.txt and A.txt will files to be overwritten
@@ -105,6 +115,7 @@ export async function findFilesToUpload(
     // isDirectory() returns false for symlinks if using fs.lstat(), make sure to use fs.stat() instead
     if (!fileStats.isDirectory()) {
       debug(`File:${searchResult} was found using the provided searchPath`)
+      verboseLog(`Including file: ${searchResult}`, verbose)
       searchResults.push(searchResult)
 
       // detect any files that would be overwritten because of case insensitivity
@@ -119,11 +130,13 @@ export async function findFilesToUpload(
       debug(
         `Removing ${searchResult} from rawSearchResults because it is a directory`
       )
+      verboseLog(`Skipping directory: ${searchResult}`, verbose)
     }
   }
 
   // Calculate the root directory for the artifact using the search paths that were utilized
   const searchPaths: string[] = globber.getSearchPaths()
+  verboseLog(`Glob search paths: ${JSON.stringify(searchPaths)}`, verbose)
 
   if (searchPaths.length > 1) {
     info(

@@ -35,4 +35,9 @@ export interface MergeInputs {
    * Whether or not to include hidden files in the artifact
    */
   includeHiddenFiles: boolean
+
+  /**
+   * Enable verbose logging for troubleshooting merge/upload issues
+   */
+  verbose: boolean
 }

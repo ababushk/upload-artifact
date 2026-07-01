@@ -101,6 +101,7 @@ const mockInputs = (
     [Inputs.RetentionDays]: 0,
     [Inputs.CompressionLevel]: 6,
     [Inputs.DeleteMerged]: false,
+    [Inputs.Verbose]: true,
     ...overrides
   }
 
@@ -155,7 +156,8 @@ describe('merge', () => {
 
     for (const a of fixtures.artifacts) {
       expect(artifact.default.downloadArtifact).toHaveBeenCalledWith(a.id, {
-        path: fixtures.tmpDirectory
+        path: fixtures.tmpDirectory,
+        verbose: true
       })
     }
 
@@ -163,7 +165,7 @@ describe('merge', () => {
       fixtures.artifactName,
       fixtures.filesToUpload,
       fixtures.tmpDirectory,
-      {compressionLevel: 6}
+      {compressionLevel: 6, verbose: true}
     )
   })
 
@@ -187,7 +189,7 @@ describe('merge', () => {
       fixtures.artifactName,
       fixtures.filesToUpload,
       fixtures.tmpDirectory,
-      {compressionLevel: 2}
+      {compressionLevel: 2, verbose: true}
     )
   })
 
@@ -202,7 +204,7 @@ describe('merge', () => {
       fixtures.artifactName,
       fixtures.filesToUpload,
       fixtures.tmpDirectory,
-      {retentionDays: 7, compressionLevel: 6}
+      {retentionDays: 7, compressionLevel: 6, verbose: true}
     )
   })
 

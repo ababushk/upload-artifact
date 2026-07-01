@@ -41,4 +41,9 @@ export interface UploadInputs {
    * When false, only a single file can be uploaded.
    */
   archive: boolean
+
+  /**
+   * Enable verbose logging for troubleshooting upload issues
+   */
+  verbose: boolean
 }

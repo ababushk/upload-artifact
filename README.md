@@ -113,6 +113,10 @@ You are welcome to still raise bugs in this repo.
     # If 'false', only a single file can be uploaded. The name of the file will be used as the artifact name (the 'name' parameter is ignored)
     # Optional. Default is 'true'
     archive:
+
+    # Enable verbose logging for troubleshooting upload issues.
+    # Optional. Default is 'true'
+    verbose:
 ```
 
 ### Outputs
@@ -474,6 +478,49 @@ If you must preserve permissions, you can `tar` all of your files together befor
   with:
     path: my_files.tar
     archive: false
+```
+
+## Troubleshooting
+
+### Verbose Logging
+
+Verbose logging is **on by default**. To reduce log output, set `verbose: false`:
+
+```yaml
+steps:
+- uses: actions/upload-artifact@v7
+  with:
+    name: my-artifact
+    path: path/to/artifact/
+    verbose: false
+```
+
+When verbose logging is enabled, the action outputs detailed information about:
+
+- Input parameter parsing
+- Glob search and file discovery (including skipped directories)
+- Overwrite and artifact deletion attempts
+- Upload options passed to the artifact client
+- Upload response metadata and action outputs
+- Merge-artifact download, merge, and cleanup steps (when using the merge action)
+
+The verbose logs are prefixed with `[VERBOSE]` and can help identify:
+
+- **Path and glob issues** when no files or unexpected files are matched
+- **Overwrite conflicts** when replacing an existing artifact
+- **Archive mode misconfiguration** when `archive: false` with multiple files
+- **Merge pattern problems** when no artifacts match the pattern
+
+Example verbose output:
+
+```
+[VERBOSE] Starting upload-artifact action with inputs: {...}
+[VERBOSE] Searching for files to upload with path 'path/to/artifact/' (includeHiddenFiles: false)
+[VERBOSE] Glob matched 3 path(s) before filtering directories
+[VERBOSE] File search complete - 3 file(s), root directory: 'path/to/artifact'
+[VERBOSE] Beginning artifact upload
+[VERBOSE] Upload API response - ID: 12345, size: 1024 bytes, digest: abc...
+[VERBOSE] Action completed successfully
 ```
 
 ## Where does the upload go?

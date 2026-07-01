@@ -6,5 +6,6 @@ export enum Inputs {
   RetentionDays = 'retention-days',
   CompressionLevel = 'compression-level',
   DeleteMerged = 'delete-merged',
-  IncludeHiddenFiles = 'include-hidden-files'
+  IncludeHiddenFiles = 'include-hidden-files',
+  Verbose = 'verbose'
 }

@@ -1,18 +1,38 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import artifact, {UploadArtifactOptions} from '@actions/artifact'
+import {verboseLog} from './verbose-log.js'
 
 export async function uploadArtifact(
   artifactName: string,
   filesToUpload: string[],
   rootDirectory: string,
-  options: UploadArtifactOptions
+  options: UploadArtifactOptions,
+  verbose: boolean
 ) {
+  verboseLog(
+    `Calling artifact.uploadArtifact with name '${artifactName}', ${filesToUpload.length} file(s), root '${rootDirectory}', options: ${JSON.stringify(options)}`,
+    verbose
+  )
+  if (verbose && filesToUpload.length <= 20) {
+    verboseLog(`Files to upload: ${JSON.stringify(filesToUpload)}`, verbose)
+  } else if (verbose) {
+    verboseLog(
+      `First 10 files to upload: ${JSON.stringify(filesToUpload.slice(0, 10))} ... (${filesToUpload.length} total)`,
+      verbose
+    )
+  }
+
   const uploadResponse = await artifact.uploadArtifact(
     artifactName,
     filesToUpload,
     rootDirectory,
-    options
+    {...options, verbose}
+  )
+
+  verboseLog(
+    `Upload API response - ID: ${uploadResponse.id}, size: ${uploadResponse.size} bytes, digest: ${uploadResponse.digest ?? '<none>'}`,
+    verbose
   )
 
   core.info(
@@ -26,4 +46,5 @@ export async function uploadArtifact(
 
   core.info(`Artifact download URL: ${artifactURL}`)
   core.setOutput('artifact-url', artifactURL)
+  verboseLog(`Set outputs artifact-id, artifact-digest, artifact-url`, verbose)
 }

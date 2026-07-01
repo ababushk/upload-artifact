@@ -11,6 +11,7 @@ export function getInputs(): UploadInputs {
   const overwrite = core.getBooleanInput(Inputs.Overwrite)
   const includeHiddenFiles = core.getBooleanInput(Inputs.IncludeHiddenFiles)
   const archive = core.getBooleanInput(Inputs.Archive)
+  const verbose = core.getBooleanInput(Inputs.Verbose, {required: false})
 
   const ifNoFilesFound = core.getInput(Inputs.IfNoFilesFound)
   const noFileBehavior: NoFileOptions = NoFileOptions[ifNoFilesFound]
@@ -31,7 +32,8 @@ export function getInputs(): UploadInputs {
     ifNoFilesFound: noFileBehavior,
     overwrite: overwrite,
     includeHiddenFiles: includeHiddenFiles,
-    archive: archive
+    archive: archive,
+    verbose: verbose
   } as UploadInputs
 
   const retentionDaysStr = core.getInput(Inputs.RetentionDays)

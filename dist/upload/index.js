@@ -130341,7 +130341,19 @@ function glob_hashFiles(patterns_1) {
     });
 }
 //# sourceMappingURL=glob.js.map
+;// CONCATENATED MODULE: ./src/shared/verbose-log.ts
+
+const verboseLog = (message, verbose) => {
+    if (verbose) {
+        info(`[VERBOSE] ${message}`);
+    }
+    else {
+        core_debug(message);
+    }
+};
+
 ;// CONCATENATED MODULE: ./src/shared/search.ts
+
 
 
 
@@ -130408,10 +130420,12 @@ function getMultiPathLCA(searchPaths) {
     }
     return external_path_.join(...commonPaths);
 }
-async function findFilesToUpload(searchPath, includeHiddenFiles) {
+async function findFilesToUpload(searchPath, includeHiddenFiles, verbose = false) {
+    verboseLog(`Creating globber for search path '${searchPath}' (excludeHiddenFiles: ${!(includeHiddenFiles || false)})`, verbose);
     const searchResults = [];
     const globber = await create(searchPath, getDefaultGlobOptions(includeHiddenFiles || false));
     const rawSearchResults = await globber.glob();
+    verboseLog(`Glob matched ${rawSearchResults.length} path(s) before filtering directories`, verbose);
     /*
       Files are saved with case insensitivity. Uploading both a.txt and A.txt will files to be overwritten
       Detect any files that could be overwritten for user awareness
@@ -130426,6 +130440,7 @@ async function findFilesToUpload(searchPath, includeHiddenFiles) {
         // isDirectory() returns false for symlinks if using fs.lstat(), make sure to use fs.stat() instead
         if (!fileStats.isDirectory()) {
             core_debug(`File:${searchResult} was found using the provided searchPath`);
+            verboseLog(`Including file: ${searchResult}`, verbose);
             searchResults.push(searchResult);
             // detect any files that would be overwritten because of case insensitivity
             if (set.has(searchResult.toLowerCase())) {
@@ -130437,10 +130452,12 @@ async function findFilesToUpload(searchPath, includeHiddenFiles) {
         }
         else {
             core_debug(`Removing ${searchResult} from rawSearchResults because it is a directory`);
+            verboseLog(`Skipping directory: ${searchResult}`, verbose);
         }
     }
     // Calculate the root directory for the artifact using the search paths that were utilized
     const searchPaths = globber.getSearchPaths();
+    verboseLog(`Glob search paths: ${JSON.stringify(searchPaths)}`, verbose);
     if (searchPaths.length > 1) {
         info(`Multiple search paths detected. Calculating the least common ancestor of all paths`);
         const lcaSearchPath = getMultiPathLCA(searchPaths);
@@ -130478,6 +130495,7 @@ var Inputs;
     Inputs["Overwrite"] = "overwrite";
     Inputs["IncludeHiddenFiles"] = "include-hidden-files";
     Inputs["Archive"] = "archive";
+    Inputs["Verbose"] = "verbose";
 })(Inputs || (Inputs = {}));
 var NoFileOptions;
 (function (NoFileOptions) {
@@ -130507,6 +130525,7 @@ function getInputs() {
     const overwrite = getBooleanInput(Inputs.Overwrite);
     const includeHiddenFiles = getBooleanInput(Inputs.IncludeHiddenFiles);
     const archive = getBooleanInput(Inputs.Archive);
+    const verbose = getBooleanInput(Inputs.Verbose, { required: false });
     const ifNoFilesFound = getInput(Inputs.IfNoFilesFound);
     const noFileBehavior = NoFileOptions[ifNoFilesFound];
     if (!noFileBehavior) {
@@ -130518,7 +130537,8 @@ function getInputs() {
         ifNoFilesFound: noFileBehavior,
         overwrite: overwrite,
         includeHiddenFiles: includeHiddenFiles,
-        archive: archive
+        archive: archive,
+        verbose: verbose
     };
     const retentionDaysStr = getInput(Inputs.RetentionDays);
     if (retentionDaysStr) {
@@ -130544,8 +130564,17 @@ function getInputs() {
 
 
 
-async function upload_artifact_uploadArtifact(artifactName, filesToUpload, rootDirectory, options) {
+
+async function upload_artifact_uploadArtifact(artifactName, filesToUpload, rootDirectory, options, verbose) {
+    verboseLog(`Calling artifact.uploadArtifact with name '${artifactName}', ${filesToUpload.length} file(s), root '${rootDirectory}', options: ${JSON.stringify(options)}`, verbose);
+    if (verbose && filesToUpload.length <= 20) {
+        verboseLog(`Files to upload: ${JSON.stringify(filesToUpload)}`, verbose);
+    }
+    else if (verbose) {
+        verboseLog(`First 10 files to upload: ${JSON.stringify(filesToUpload.slice(0, 10))} ... (${filesToUpload.length} total)`, verbose);
+    }
     const uploadResponse = await artifact.uploadArtifact(artifactName, filesToUpload, rootDirectory, options);
+    verboseLog(`Upload API response - ID: ${uploadResponse.id}, size: ${uploadResponse.size} bytes, digest: ${uploadResponse.digest ?? '<none>'}`, verbose);
     info(`Artifact ${artifactName} has been successfully uploaded! Final size is ${uploadResponse.size} bytes. Artifact ID is ${uploadResponse.id}`);
     setOutput('artifact-id', uploadResponse.id);
     setOutput('artifact-digest', uploadResponse.digest);
@@ -130553,6 +130582,7 @@ async function upload_artifact_uploadArtifact(artifactName, filesToUpload, rootD
     const artifactURL = `${github_context.serverUrl}/${repository.owner}/${repository.repo}/actions/runs/${github_context.runId}/artifacts/${uploadResponse.id}`;
     info(`Artifact download URL: ${artifactURL}`);
     setOutput('artifact-url', artifactURL);
+    verboseLog(`Set outputs artifact-id, artifact-digest, artifact-url`, verbose);
 }
 
 ;// CONCATENATED MODULE: ./src/upload/upload-artifact.ts
@@ -130562,23 +130592,42 @@ async function upload_artifact_uploadArtifact(artifactName, filesToUpload, rootD
 
 
 
-async function deleteArtifactIfExists(artifactName) {
+
+async function deleteArtifactIfExists(artifactName, verbose) {
+    verboseLog(`Overwrite enabled, attempting to delete existing artifact '${artifactName}'`, verbose);
     try {
         await artifact.deleteArtifact(artifactName);
+        verboseLog(`Deleted existing artifact '${artifactName}'`, verbose);
     }
     catch (error) {
         if (error instanceof ArtifactNotFoundError) {
             core_debug(`Skipping deletion of '${artifactName}', it does not exist`);
+            verboseLog(`No existing artifact named '${artifactName}' to delete`, verbose);
             return;
         }
         // Best effort, we don't want to fail the action if this fails
         core_debug(`Unable to delete artifact: ${error.message}`);
+        verboseLog(`Failed to delete artifact '${artifactName}': ${error.message}`, verbose);
     }
 }
 async function run() {
     const inputs = getInputs();
-    const searchResult = await findFilesToUpload(inputs.searchPath, inputs.includeHiddenFiles);
+    verboseLog(`Starting upload-artifact action with inputs: ${JSON.stringify({
+        artifactName: inputs.artifactName,
+        searchPath: inputs.searchPath,
+        ifNoFilesFound: inputs.ifNoFilesFound,
+        retentionDays: inputs.retentionDays ?? '<default>',
+        compressionLevel: inputs.compressionLevel ?? '<default>',
+        overwrite: inputs.overwrite,
+        includeHiddenFiles: inputs.includeHiddenFiles,
+        archive: inputs.archive,
+        verbose: inputs.verbose
+    }, null, 2)}`, inputs.verbose);
+    verboseLog(`Searching for files to upload with path '${inputs.searchPath}' (includeHiddenFiles: ${inputs.includeHiddenFiles})`, inputs.verbose);
+    const searchResult = await findFilesToUpload(inputs.searchPath, inputs.includeHiddenFiles, inputs.verbose);
+    verboseLog(`File search complete - ${searchResult.filesToUpload.length} file(s), root directory: '${searchResult.rootDirectory}'`, inputs.verbose);
     if (searchResult.filesToUpload.length === 0) {
+        verboseLog(`No files matched search path '${inputs.searchPath}', applying if-no-files-found: '${inputs.ifNoFilesFound}'`, inputs.verbose);
         // No files were found, different use cases warrant different types of behavior if nothing is found
         switch (inputs.ifNoFilesFound) {
             case NoFileOptions.warn: {
@@ -130594,6 +130643,7 @@ async function run() {
                 break;
             }
         }
+        verboseLog(`Action finished without uploading an artifact`, inputs.verbose);
     }
     else {
         const s = searchResult.filesToUpload.length === 1 ? '' : 's';
@@ -130601,11 +130651,15 @@ async function run() {
         core_debug(`Root artifact directory is ${searchResult.rootDirectory}`);
         // Validate that only a single file is uploaded when archive is false
         if (!inputs.archive && searchResult.filesToUpload.length > 1) {
+            verboseLog(`Validation failed: archive=false requires a single file but ${searchResult.filesToUpload.length} were found`, inputs.verbose);
             setFailed(`When 'archive' is set to false, only a single file can be uploaded. Found ${searchResult.filesToUpload.length} files to upload.`);
             return;
         }
         if (inputs.overwrite) {
-            await deleteArtifactIfExists(inputs.artifactName);
+            await deleteArtifactIfExists(inputs.artifactName, inputs.verbose);
+        }
+        else {
+            verboseLog(`Overwrite disabled, existing artifact with the same name may cause upload to fail`, inputs.verbose);
         }
         const options = {};
         if (inputs.retentionDays) {
@@ -130616,8 +130670,11 @@ async function run() {
         }
         if (!inputs.archive) {
             options.skipArchive = true;
+            verboseLog(`Archive disabled (skipArchive), artifact name will be derived from file: '${searchResult.filesToUpload[0]}'`, inputs.verbose);
         }
-        await upload_artifact_uploadArtifact(inputs.artifactName, searchResult.filesToUpload, searchResult.rootDirectory, options);
+        verboseLog(`Beginning artifact upload`, inputs.verbose);
+        await upload_artifact_uploadArtifact(inputs.artifactName, searchResult.filesToUpload, searchResult.rootDirectory, options, inputs.verbose);
+        verboseLog(`Action completed successfully`, inputs.verbose);
     }
 }
 
